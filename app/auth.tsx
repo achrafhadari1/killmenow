@@ -1,9 +1,9 @@
-// app/auth.tsx
 import { useEffect } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { useRouter } from "expo-router";
 import * as AuthSession from "expo-auth-session";
 import Constants from "expo-constants";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   setAccessToken,
   listMusicFiles,
@@ -16,6 +16,11 @@ import { Feather } from "@expo/vector-icons";
 const CLIENT_ID =
   "1034492045840-qo10kjp52v4i6gg1qff03tnll9gdvpht.apps.googleusercontent.com";
 const SCOPES = ["https://www.googleapis.com/auth/drive.readonly"];
+const CACHE_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours
+const CACHE_KEY = "@music_library";
+const redirectUri = AuthSession.makeRedirectUri({
+  useProxy: true, // crucial for Expo proxy-based flow
+});
 
 const discovery = {
   authorizationEndpoint: "https://accounts.google.com/o/oauth2/v2/auth",
@@ -24,34 +29,78 @@ const discovery = {
 
 export default function AuthScreen() {
   const router = useRouter();
-  const { setLibrary } = usePlayerStore();
+  const { setLibrary, setIsLoading } = usePlayerStore();
 
   const [request, response, promptAsync] = AuthSession.useAuthRequest(
     {
       clientId: CLIENT_ID,
       scopes: SCOPES,
-      redirectUri: AuthSession.makeRedirectUri({ useProxy: true }),
-      usePKCE: true, // ✅ Enable PKCE
+      redirectUri,
+      usePKCE: true,
     },
     discovery
   );
 
   useEffect(() => {
     if (response?.type === "success") {
+      console.log("Authentication successful");
       const { access_token } = response.params;
+      console.log("Access Token:", access_token); // ADD THIS
+      console.log("Redirect URI:", redirectUri);
       if (access_token) {
         setAccessToken(access_token);
+        console.log("Token set, starting file fetch..."); // ADD THIS
         fetchFilesAndNavigate();
+      } else {
+        console.warn("Access token missing from response"); // ADD THIS
       }
+    } else {
+      console.log("Auth response:", response); // ADD THIS
     }
   }, [response]);
 
+  const checkCache = async () => {
+    try {
+      const cached = await AsyncStorage.getItem(CACHE_KEY);
+      if (cached) {
+        const { library, timestamp } = JSON.parse(cached);
+        const age = Date.now() - new Date(timestamp).getTime();
+
+        console.log("Cache age:", Math.round(age / 1000 / 60), "minutes");
+
+        if (age < CACHE_EXPIRY && library.length > 0) {
+          console.log("Using cached library with", library.length, "tracks");
+          setLibrary(library);
+          return true;
+        }
+      }
+      console.log("No valid cache found");
+      return false;
+    } catch (error) {
+      console.error("Cache check failed:", error);
+      return false;
+    }
+  };
+
   async function fetchFilesAndNavigate() {
     try {
+      setIsLoading(true);
+      console.log("Starting library fetch");
+
+      const isCached = await checkCache();
+      if (isCached) {
+        console.log("Navigating due to cache"); // ADD THIS
+        router.replace("/(tabs)");
+        return;
+      }
+
+      console.log("Fetching files from Google Drive..."); // ADD THIS
       const files = await listMusicFiles();
+      console.log("Found", files.length, "music files"); // YOU HAVE THIS
 
       const tracks = await Promise.all(
         files.map(async (file) => {
+          console.log("Processing file:", file.name); // ADD THIS
           const streamUrl = await getStreamUrl(file.id);
           const nameComponents = file.name.split("-").map((s) => s.trim());
           const artist = nameComponents[0] || "Unknown Artist";
@@ -59,6 +108,7 @@ export default function AuthScreen() {
             nameComponents[1]?.replace(".mp3", "").trim() || file.name;
 
           const albumInfo = await getLastFMAlbumInfo(artist, title);
+          console.log("Processed track:", title, "by", artist); // YOU HAVE THIS
 
           return {
             id: file.id,
@@ -71,11 +121,13 @@ export default function AuthScreen() {
         })
       );
 
+      console.log("Successfully processed", tracks.length, "tracks");
       setLibrary(tracks);
       router.replace("/(tabs)");
     } catch (error) {
-      console.error("Failed to load files:", error);
-      Alert.alert("Error", "Failed to load your music files.");
+      console.error("Failed to load files:", error); // YOU HAVE THIS
+    } finally {
+      setIsLoading(false);
     }
   }
 

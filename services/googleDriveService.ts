@@ -6,28 +6,32 @@ export function setAccessToken(token: string) {
 }
 
 export async function listMusicFiles() {
-  if (!accessToken) throw new Error('Not authenticated');
+  if (!accessToken) throw new Error("Not authenticated");
 
-  const response = await fetch(
-    'https://www.googleapis.com/drive/v3/files?' +
-      new URLSearchParams({
-        q: "mimeType contains 'audio/' and trashed = false",
-        fields: 'files(id,name,mimeType,size,modifiedTime)',
-        pageSize: '1000',
-      }),
-    {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    }
-  );
+  const url =
+    "https://www.googleapis.com/drive/v3/files?" +
+    new URLSearchParams({
+      q: "mimeType contains 'audio/' and trashed = false",
+      fields: "files(id,name,mimeType,size,modifiedTime)",
+      pageSize: "1000",
+    });
+
+  console.log("Fetching from:", url); // ADD THIS
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
 
   const data = await response.json();
+  console.log("Google Drive API response:", data); // ADD THIS
+
   return data.files;
 }
 
 export async function getFileMetadata(fileId: string) {
-  if (!accessToken) throw new Error('Not authenticated');
+  if (!accessToken) throw new Error("Not authenticated");
 
   const response = await fetch(
     `https://www.googleapis.com/drive/v3/files/${fileId}?fields=*`,
@@ -42,6 +46,6 @@ export async function getFileMetadata(fileId: string) {
 }
 
 export async function getStreamUrl(fileId: string) {
-  if (!accessToken) throw new Error('Not authenticated');
+  if (!accessToken) throw new Error("Not authenticated");
   return `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&access_token=${accessToken}`;
 }

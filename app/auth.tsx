@@ -1,3 +1,4 @@
+// app/auth.tsx
 import { useEffect } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from "react-native";
 import { useRouter } from "expo-router";
@@ -12,13 +13,10 @@ import { getLastFMAlbumInfo } from "@/services/lastfm";
 import { usePlayerStore } from "@/store/player";
 import { Feather } from "@expo/vector-icons";
 
-// Constants
 const CLIENT_ID =
-  "1034492045840-l1qiqmg9o36bgjmeps2lrbo4la42vs64.apps.googleusercontent.com";
+  "1034492045840-qo10kjp52v4i6gg1qff03tnll9gdvpht.apps.googleusercontent.com";
 const SCOPES = ["https://www.googleapis.com/auth/drive.readonly"];
-const projectNameForProxy = "@achrafhadari/music-drive";
 
-// Discovery endpoints
 const discovery = {
   authorizationEndpoint: "https://accounts.google.com/o/oauth2/v2/auth",
   tokenEndpoint: "https://oauth2.googleapis.com/token",
@@ -28,28 +26,17 @@ export default function AuthScreen() {
   const router = useRouter();
   const { setLibrary } = usePlayerStore();
 
-  // Redirect URI
-  const redirectUri = "https://auth.expo.io/@achrafhadari/music-drive";
-
   const [request, response, promptAsync] = AuthSession.useAuthRequest(
     {
       clientId: CLIENT_ID,
       scopes: SCOPES,
-      redirectUri,
-      responseType: "code",
-      usePKCE: true,
+      redirectUri: AuthSession.makeRedirectUri({ useProxy: true }),
+      usePKCE: true, // ✅ Enable PKCE
     },
     discovery
   );
 
   useEffect(() => {
-    console.log("Auth request object:", request);
-    console.log(
-      "Redirect URI used:",
-      AuthSession.makeRedirectUri({ useProxy: true, projectNameForProxy })
-    );
-    console.log("App Ownership:", Constants.appOwnership);
-
     if (response?.type === "success") {
       const { access_token } = response.params;
       if (access_token) {
@@ -57,7 +44,7 @@ export default function AuthScreen() {
         fetchFilesAndNavigate();
       }
     }
-  }, [response, request]);
+  }, [response]);
 
   async function fetchFilesAndNavigate() {
     try {
@@ -92,17 +79,6 @@ export default function AuthScreen() {
     }
   }
 
-  const handleSignIn = async () => {
-    if (request) {
-      await promptAsync();
-    } else {
-      Alert.alert(
-        "Auth Request not ready",
-        "Auth request is not ready yet. Try refreshing the page."
-      );
-    }
-  };
-
   return (
     <View style={styles.container}>
       <View style={styles.content}>
@@ -113,9 +89,8 @@ export default function AuthScreen() {
         </Text>
 
         <TouchableOpacity
-          style={[styles.signInButton, { opacity: request ? 1 : 0.5 }]}
-          onPress={handleSignIn}
-          disabled={!request}
+          style={styles.signInButton}
+          onPress={() => promptAsync()}
         >
           <Feather
             name="log-in"

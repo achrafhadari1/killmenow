@@ -15,11 +15,16 @@ import { Feather } from "@expo/vector-icons";
 
 const CLIENT_ID =
   "1034492045840-qo10kjp52v4i6gg1qff03tnll9gdvpht.apps.googleusercontent.com";
+// For Android clients, you may need to provide a client secret
+// In a production app, you should NEVER store this directly in your code
+// Instead, use a secure server-side endpoint or a secure storage solution
+const CLIENT_SECRET = ""; // You'll need to fill this with your actual client secret
 const SCOPES = ["https://www.googleapis.com/auth/drive.readonly"];
 const CACHE_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours
 const CACHE_KEY = "@music_library";
+// Using the native redirect URI instead of proxy for better token handling
 const redirectUri = AuthSession.makeRedirectUri({
-  useProxy: true, // crucial for Expo proxy-based flow
+  native: "com.achraf.musicdrive:/oauthredirect", // must match your app.json scheme
 });
 
 const discovery = {
@@ -37,26 +42,46 @@ export default function AuthScreen() {
       scopes: SCOPES,
       redirectUri,
       usePKCE: true,
+      responseType: "code", // This avoids code exchange manually
     },
     discovery
   );
 
   useEffect(() => {
-    if (response?.type === "success") {
-      console.log("Authentication successful");
-      const { access_token } = response.params;
-      console.log("Access Token:", access_token); // ADD THIS
-      console.log("Redirect URI:", redirectUri);
-      if (access_token) {
-        setAccessToken(access_token);
-        console.log("Token set, starting file fetch..."); // ADD THIS
-        fetchFilesAndNavigate();
-      } else {
-        console.warn("Access token missing from response"); // ADD THIS
+    const handleAuthResponse = async () => {
+      if (response?.type === "success" && response.params?.code) {
+        const code = response.params.code;
+        const codeVerifier = request?.codeVerifier; // REQUIRED
+
+        try {
+          const tokenResponse = await fetch(discovery.tokenEndpoint!, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: new URLSearchParams({
+              code,
+              client_id: CLIENT_ID,
+              redirect_uri: redirectUri,
+              grant_type: "authorization_code",
+              code_verifier: codeVerifier!,
+            }).toString(),
+          });
+
+          const tokenData = await tokenResponse.json();
+          console.log("Token Response:", tokenData);
+
+          if (tokenData.access_token) {
+            setAccessToken(tokenData.access_token);
+            await fetchFilesAndNavigate();
+          } else {
+            console.warn("Access token not received", tokenData);
+          }
+        } catch (error) {
+          console.error("Token exchange failed:", error);
+        }
       }
-    } else {
-      console.log("Auth response:", response); // ADD THIS
-    }
+    };
+
+    handleAuthResponse();
   }, [response]);
 
   const checkCache = async () => {

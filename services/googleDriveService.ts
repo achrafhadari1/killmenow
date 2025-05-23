@@ -6,7 +6,15 @@ export function setAccessToken(token: string) {
 }
 
 export async function listMusicFiles() {
-  if (!accessToken) throw new Error("Not authenticated");
+  if (!accessToken) {
+    console.error("Access token is null or empty");
+    throw new Error("Not authenticated - missing access token");
+  }
+
+  console.log(
+    "Using access token (first 10 chars):",
+    accessToken.substring(0, 10) + "..."
+  );
 
   const url =
     "https://www.googleapis.com/drive/v3/files?" +
@@ -16,36 +24,90 @@ export async function listMusicFiles() {
       pageSize: "1000",
     });
 
-  console.log("Fetching from:", url); // ADD THIS
+  console.log("Fetching from:", url);
 
-  const response = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
-  });
-
-  const data = await response.json();
-  console.log("Google Drive API response:", data); // ADD THIS
-
-  return data.files;
-}
-
-export async function getFileMetadata(fileId: string) {
-  if (!accessToken) throw new Error("Not authenticated");
-
-  const response = await fetch(
-    `https://www.googleapis.com/drive/v3/files/${fileId}?fields=*`,
-    {
+  try {
+    const response = await fetch(url, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
       },
-    }
-  );
+    });
 
-  return await response.json();
+    if (!response.ok) {
+      console.error(
+        "API request failed:",
+        response.status,
+        response.statusText
+      );
+      const errorText = await response.text();
+      console.error("Error details:", errorText);
+      throw new Error(
+        `Google Drive API error: ${response.status} ${response.statusText}`
+      );
+    }
+
+    const data = await response.json();
+    console.log(
+      "Google Drive API response received, files count:",
+      data.files?.length || 0
+    );
+
+    if (!data.files) {
+      console.warn("No files array in response:", JSON.stringify(data));
+      return [];
+    }
+
+    return data.files;
+  } catch (error) {
+    console.error("Failed to fetch music files:", error);
+    throw error;
+  }
+}
+
+export async function getFileMetadata(fileId: string) {
+  if (!accessToken) {
+    console.error("Access token is null or empty");
+    throw new Error("Not authenticated - missing access token");
+  }
+
+  try {
+    const response = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${fileId}?fields=*`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      console.error(
+        "API request failed:",
+        response.status,
+        response.statusText
+      );
+      const errorText = await response.text();
+      console.error("Error details:", errorText);
+      throw new Error(
+        `Google Drive API error: ${response.status} ${response.statusText}`
+      );
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error(`Failed to get metadata for file ${fileId}:`, error);
+    throw error;
+  }
 }
 
 export async function getStreamUrl(fileId: string) {
-  if (!accessToken) throw new Error("Not authenticated");
-  return `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&access_token=${accessToken}`;
+  if (!accessToken) {
+    console.error("Access token is null or empty");
+    throw new Error("Not authenticated - missing access token");
+  }
+
+  // Log that we're generating a stream URL (useful for debugging)
+  const url = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&access_token=${accessToken}`;
+  console.log(`Generated stream URL for file ${fileId}`);
+  return url;
 }

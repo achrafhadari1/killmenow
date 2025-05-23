@@ -123,28 +123,117 @@ export default function AuthScreen() {
       const files = await listMusicFiles();
       console.log("Found", files.length, "music files"); // YOU HAVE THIS
 
-      const tracks = await Promise.all(
-        files.map(async (file) => {
-          console.log("Processing file:", file.name); // ADD THIS
-          const streamUrl = await getStreamUrl(file.id);
-          const nameComponents = file.name.split("-").map((s) => s.trim());
-          const artist = nameComponents[0] || "Unknown Artist";
-          const title =
-            nameComponents[1]?.replace(".mp3", "").trim() || file.name;
+      console.log("Processing files and organizing by artist...");
 
+      // First pass: extract metadata from all files
+      const processedFiles = await Promise.all(
+        files.map(async (file) => {
+          console.log("Processing file:", file.name);
+          const streamUrl = await getStreamUrl(file.id);
+
+          // Improved file name parsing to handle various formats and extensions
+          let artist = "Unknown Artist";
+          let title = file.name;
+          let album = null;
+
+          // Improved file name parsing to handle various formats
+
+          // First, check if the file has a number prefix like "01 Track Name.m4a"
+          const numberPrefixRegex = /^(\d+)[\s_-]+(.+)$/;
+          const numberPrefixMatch = file.name.match(numberPrefixRegex);
+
+          console.log(`Checking number prefix for: ${file.name}`);
+          if (numberPrefixMatch) {
+            console.log(
+              `Found number prefix: ${numberPrefixMatch[1]}, content: ${numberPrefixMatch[2]}`
+            );
+          }
+
+          if (numberPrefixMatch) {
+            // This is likely a track with a number prefix
+            title = numberPrefixMatch[2]
+              .replace(/\.(mp3|flac|m4a|wav|ogg)$/i, "")
+              .trim();
+
+            // Try to extract artist from the title if it contains a dash
+            const titleParts = title.split("-").map((s) => s.trim());
+            if (titleParts.length >= 2) {
+              artist = titleParts[0];
+              title = titleParts.slice(1).join(" - ");
+            }
+          } else {
+            // Check for Artist - Title format
+            const artistTitleRegex = /^(.+?)\s*-\s*(.+)$/;
+            const artistTitleMatch = file.name.match(artistTitleRegex);
+
+            if (artistTitleMatch) {
+              artist = artistTitleMatch[1].trim();
+              // Remove any file extension (.mp3, .flac, .m4a, etc.)
+              title = artistTitleMatch[2]
+                .replace(/\.(mp3|flac|m4a|wav|ogg)$/i, "")
+                .trim();
+            } else {
+              // If no dash in filename, just use the filename as title
+              title = file.name
+                .replace(/\.(mp3|flac|m4a|wav|ogg)$/i, "")
+                .trim();
+            }
+          }
+
+          // Try to extract album from brackets or parentheses in the title
+          const bracketRegex = /\[(.*?)\]|\((.*?)\)/;
+          const bracketMatch = title.match(bracketRegex);
+          if (bracketMatch) {
+            album = bracketMatch[1] || bracketMatch[2];
+            // Remove the album part from the title
+            title = title.replace(/\[(.*?)\]|\((.*?)\)/g, "").trim();
+          }
+
+          console.log(
+            `Parsed metadata - Artist: "${artist}", Title: "${title}", Album: "${
+              album || "None"
+            }"`
+          );
+
+          // Try to get album info from Last.fm
           const albumInfo = await getLastFMAlbumInfo(artist, title);
-          console.log("Processed track:", title, "by", artist); // YOU HAVE THIS
+
+          // Use the album name from filename if Last.fm didn't provide one
+          let finalAlbum = albumInfo?.album || album;
+
+          // If we still don't have an album, try to use the artist name as a fallback grouping
+          if (!finalAlbum && artist !== "Unknown Artist") {
+            finalAlbum = `${artist}'s Collection`;
+          }
 
           return {
             id: file.id,
             title,
             artist,
-            album: albumInfo?.album || undefined,
+            album: finalAlbum || undefined,
             artwork: albumInfo?.albumArtUrl,
             streamUrl,
           };
         })
       );
+
+      // Group tracks by artist to improve organization
+      const artistGroups = {};
+      processedFiles.forEach((track) => {
+        if (!artistGroups[track.artist]) {
+          artistGroups[track.artist] = [];
+        }
+        artistGroups[track.artist].push(track);
+      });
+
+      console.log(
+        `Organized tracks into ${
+          Object.keys(artistGroups).length
+        } artist groups`
+      );
+
+      // Flatten the tracks array for the library
+      const tracks = processedFiles;
 
       console.log("Successfully processed", tracks.length, "tracks");
       setLibrary(tracks);

@@ -8,6 +8,7 @@ import {
   Dimensions,
   Alert,
 } from "react-native";
+import * as trackPlayerService from "@/services/trackPlayerService";
 import { signIn, listMusicFiles } from "../services/googleDriveService";
 import { usePlayerStore } from "../store/player";
 import TrackCard from "../components/TrackCard";
@@ -41,29 +42,82 @@ export default function HomeScreen() {
     }
   }, []);
 
+  // Get recently added tracks
   const recentTracks = [...library]
     .sort((a, b) => b.id.localeCompare(a.id))
     .slice(0, 6);
 
-  const featuredAlbums = [
-    ...new Set(
-      library.filter((track) => track.album).map((track) => track.album)
-    ),
-  ].slice(0, 6);
-
-  const albums = featuredAlbums.map((albumName) => {
-    const albumTracks = library.filter((track) => track.album === albumName);
-    return {
-      name: albumName,
-      artist: albumTracks[0].artist,
-      artwork: albumTracks[0].artwork,
-      tracks: albumTracks,
-    };
+  // Group tracks by artist
+  const artistsMap = {};
+  library.forEach((track) => {
+    if (!artistsMap[track.artist]) {
+      artistsMap[track.artist] = [];
+    }
+    artistsMap[track.artist].push(track);
   });
 
+  // Get a list of all artists
+  const artists = Object.keys(artistsMap);
+  console.log(`Found ${artists.length} artists in library`);
+
+  // Group tracks by album (if album info is available)
+  const albumsMap = {};
+  library.forEach((track) => {
+    if (track.album) {
+      const albumKey = `${track.artist} - ${track.album}`;
+      if (!albumsMap[albumKey]) {
+        albumsMap[albumKey] = {
+          name: track.album,
+          artist: track.artist,
+          artwork: track.artwork,
+          tracks: [],
+        };
+      }
+      albumsMap[albumKey].tracks.push(track);
+    }
+  });
+
+  // Convert albums map to array
+  const albums = Object.values(albumsMap);
+  console.log(`Found ${albums.length} albums in library`);
+
+  // If no albums were found, create "albums" based on artists
+  const featuredItems =
+    albums.length > 0
+      ? albums.slice(0, 6)
+      : artists.slice(0, 6).map((artistName) => {
+          const artistTracks = artistsMap[artistName];
+          return {
+            name: artistName,
+            artist: artistName,
+            artwork: artistTracks[0]?.artwork,
+            tracks: artistTracks,
+            isArtist: true,
+          };
+        });
+
   const playTrack = async (track) => {
+    console.log("Playing track from HomeScreen:", track.title);
+
+    // Set the current track in the store
     await setCurrentTrack(track);
-    setIsPlaying(true);
+
+    // Start playback using the TrackPlayer service
+    try {
+      await trackPlayerService.playTrack({
+        id: track.id,
+        url: track.streamUrl,
+        title: track.title,
+        artist: track.artist,
+        album: track.album || "",
+        artwork: track.artwork || "",
+      });
+
+      // Update playing state
+      setIsPlaying(true);
+    } catch (error) {
+      console.error("Error playing track:", error);
+    }
   };
 
   return (
@@ -84,10 +138,12 @@ export default function HomeScreen() {
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Featured Albums</Text>
+        <Text style={styles.sectionTitle}>
+          {albums.length > 0 ? "Featured Albums" : "Featured Artists"}
+        </Text>
         <View style={styles.grid}>
-          {albums.map((album) => (
-            <AlbumCard key={album.name} album={album} />
+          {featuredItems.map((item) => (
+            <AlbumCard key={`${item.artist}-${item.name}`} album={item} />
           ))}
         </View>
       </View>

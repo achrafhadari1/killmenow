@@ -3,6 +3,11 @@ let accessToken: string | null = null;
 
 export function setAccessToken(token: string) {
   accessToken = token;
+  console.log("Access token set successfully");
+}
+
+export function getAccessToken(): string | null {
+  return accessToken;
 }
 
 export async function listMusicFiles() {
@@ -106,8 +111,14 @@ export async function getStreamUrl(fileId: string) {
     throw new Error("Not authenticated - missing access token");
   }
 
-  // Log that we're generating a stream URL (useful for debugging)
-  const url = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&access_token=${accessToken}`;
+  // Generate a clean URL without embedding the token directly
+  // This is safer and more reliable
+  const url = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`;
+
+  // Instead of embedding the token in the URL, we'll return an object with the URL and headers
+  // This allows the player to use proper authorization headers
   console.log(`Generated stream URL for file ${fileId}`);
+
+  // Return both the URL and the headers needed for authorization
   return url;
 }

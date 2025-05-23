@@ -1,7 +1,8 @@
 import { useEffect } from "react";
-import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from "react-native";
 import { useRouter } from "expo-router";
 import * as AuthSession from "expo-auth-session";
+import Constants from "expo-constants";
 import {
   setAccessToken,
   listMusicFiles,
@@ -11,35 +12,44 @@ import { getLastFMAlbumInfo } from "@/services/lastfm";
 import { usePlayerStore } from "@/store/player";
 import { Feather } from "@expo/vector-icons";
 
+// Constants
 const CLIENT_ID =
-  "1034492045840-qo10kjp52v4i6gg1qff03tnll9gdvpht.apps.googleusercontent.com"; // Your Web Client ID
+  "1034492045840-l1qiqmg9o36bgjmeps2lrbo4la42vs64.apps.googleusercontent.com";
 const SCOPES = ["https://www.googleapis.com/auth/drive.readonly"];
+const projectNameForProxy = "@achrafhadari/music-drive";
+
+// Discovery endpoints
+const discovery = {
+  authorizationEndpoint: "https://accounts.google.com/o/oauth2/v2/auth",
+  tokenEndpoint: "https://oauth2.googleapis.com/token",
+};
 
 export default function AuthScreen() {
   const router = useRouter();
   const { setLibrary } = usePlayerStore();
 
-  const redirectUri = AuthSession.makeRedirectUri({
-    useProxy: true,
-  });
-
-  const discovery = {
-    authorizationEndpoint: "https://accounts.google.com/o/oauth2/v2/auth",
-    tokenEndpoint: "https://oauth2.googleapis.com/token",
-  };
+  // Redirect URI
+  const redirectUri = "https://auth.expo.io/@achrafhadari/music-drive";
 
   const [request, response, promptAsync] = AuthSession.useAuthRequest(
     {
       clientId: CLIENT_ID,
       scopes: SCOPES,
-      codeChallengeMethod: "",
       redirectUri,
-      responseType: "token", // or "code" if you want Authorization Code flow
+      responseType: "code",
+      usePKCE: true,
     },
     discovery
   );
 
   useEffect(() => {
+    console.log("Auth request object:", request);
+    console.log(
+      "Redirect URI used:",
+      AuthSession.makeRedirectUri({ useProxy: true, projectNameForProxy })
+    );
+    console.log("App Ownership:", Constants.appOwnership);
+
     if (response?.type === "success") {
       const { access_token } = response.params;
       if (access_token) {
@@ -47,7 +57,7 @@ export default function AuthScreen() {
         fetchFilesAndNavigate();
       }
     }
-  }, [response]);
+  }, [response, request]);
 
   async function fetchFilesAndNavigate() {
     try {
@@ -78,15 +88,18 @@ export default function AuthScreen() {
       router.replace("/(tabs)");
     } catch (error) {
       console.error("Failed to load files:", error);
+      Alert.alert("Error", "Failed to load your music files.");
     }
   }
 
   const handleSignIn = async () => {
     if (request) {
-      const result = await promptAsync();
-      // You can also log the redirect URI for debugging
-      console.log("Redirect URI:", redirectUri);
-      console.log("Auth result:", result);
+      await promptAsync();
+    } else {
+      Alert.alert(
+        "Auth Request not ready",
+        "Auth request is not ready yet. Try refreshing the page."
+      );
     }
   };
 

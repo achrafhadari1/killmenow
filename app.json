@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "music-drive",
+    "scheme": "com.achraf.musicdrive",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
